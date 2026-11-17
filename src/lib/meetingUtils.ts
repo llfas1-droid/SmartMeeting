@@ -1,4 +1,4 @@
-import { TaskItem } from '../types/index.ts';
+import type { TaskItem } from '../types/index.ts';
 
 export const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.mp4', '.m4a', '.webm'];
 export const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB

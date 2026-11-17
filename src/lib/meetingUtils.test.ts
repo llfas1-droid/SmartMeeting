@@ -7,7 +7,7 @@ import {
   formatDuration,
   formatFileSize 
 } from './meetingUtils.ts';
-import { TaskItem } from '../types/index.ts';
+import type { TaskItem } from '../types/index.ts';
 
 describe('meetingUtils pure unit tests', () => {
   test('validateMediaFile correctly validates allowed formats', () => {
