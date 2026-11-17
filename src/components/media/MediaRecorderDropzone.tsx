@@ -15,23 +15,30 @@ import {
   Monitor, 
   Layers, 
   ArrowRight,
-  ShieldAlert,
+  FileText,
   RotateCcw
 } from 'lucide-react';
 import { validateMediaFile, formatDuration, formatFileSize } from '../../lib/meetingUtils.ts';
+import { buildMeetingFromTranscriptText } from '../../lib/userMeetingsStorage.ts';
 import { MeetingRecording, ProcessingStep, TaskItem } from '../../types/index.ts';
 
 interface MediaRecorderDropzoneProps {
   onMeetingProcessed: (newMeeting: MeetingRecording) => void;
   onClose?: () => void;
+  managerName?: string;
+  managerEmail?: string;
 }
 
 export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
   onMeetingProcessed,
   onClose,
+  managerName,
+  managerEmail,
 }) => {
-  // Input mode: 'upload' or 'record'
-  const [activeTab, setActiveTab] = useState<'upload' | 'record'>('upload');
+  // Input mode: 'upload', 'record', or 'text'
+  const [activeTab, setActiveTab] = useState<'upload' | 'record' | 'text'>('upload');
+  const [textTitle, setTextTitle] = useState('');
+  const [transcriptText, setTranscriptText] = useState('');
   
   // Drag & drop state
   const [isDragging, setIsDragging] = useState(false);
@@ -291,13 +298,31 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
     setIsPaused(false);
   };
 
+  // Submit text transcript directly
+  const handleProcessText = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFileError(null);
+    if (!transcriptText.trim()) {
+      setFileError('Cole ou escreva o texto da reunião antes de processar.');
+      return;
+    }
+
+    const newMeeting = buildMeetingFromTranscriptText({
+      title: textTitle,
+      transcriptText,
+      managerName,
+      managerEmail,
+    });
+    onMeetingProcessed(newMeeting);
+  };
+
   // Submit file or recording for AI processing
   const handleProcessMedia = () => {
     if (!selectedFile && !recordedBlob) return;
 
     setStep('uploading');
     setProgressPercent(15);
-    setCurrentStepText('A enviar pacote multimédia com encriptação temporária...');
+    setCurrentStepText('A preparar ficheiro multimédia...');
 
     setTimeout(() => {
       setStep('extracting_audio');
@@ -359,18 +384,18 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
         },
         {
           id: `task_${Date.now()}_3`,
-          title: 'Documentar checklist de governança pós-reunião no Notion da equipa',
-          description: 'Explicar aos desenvolvedores o fluxo de aprovação mandatória antes do disparo para o Jira.',
+          title: 'Rever resumo executivo e validar entregas da equipa',
+          description: 'Confirmar datas e responsáveis antes de partilhar com os participantes.',
           assignee: {
-            name: 'Rita Silveira',
-            email: 'rita.silveira@empresa.com',
-            role: 'Project Manager',
+            name: managerName || 'Gestor da Reunião',
+            email: managerEmail || 'gestor@empresa.com',
+            role: 'Gestor',
           },
-          dueDate: '2026-10-28',
+          dueDate: new Date().toISOString().split('T')[0],
           priority: 'medium',
-          estimatedHours: 3,
+          estimatedHours: 2,
           status: 'pending_approval',
-          contextSnippet: 'Definido no encerramento para garantir adesão do squad.'
+          contextSnippet: 'Definido no encerramento para garantir alinhamento da equipa.'
         }
       ];
 
@@ -378,7 +403,7 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
         id: meetingId,
         title: selectedFile 
           ? selectedFile.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ")
-          : `Reunião Gravada em Direto (${new Date().toLocaleDateString('pt-PT')})`,
+          : `Reunião Gravada (${new Date().toLocaleDateString('pt-PT')})`,
         date: new Date().toISOString().split('T')[0],
         durationSeconds: duration,
         fileType: isFromRecord ? 'direct_recording' : 'audio/mp3',
@@ -386,27 +411,25 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
         fileSizeBytes: selectedFile ? selectedFile.size : (recordedBlob ? recordedBlob.size : 12 * 1024 * 1024),
         managerApprovalStatus: 'pending',
         summary: {
-          executiveSummary: 'Reunião operacional focada na conclusão dos entregáveis da Sprint e governança estrita de tarefas. Todos os tópicos foram mapeados e as tarefas aguardam aprovação explícita do gestor.',
+          executiveSummary: 'Reunião focada nos próximos entregáveis da equipa e validação de prazos antes do envio de tarefas.',
           keyDecisions: [
-            'Nenhuma notificação externa será enviada até que o gestor de projeto valide o mapa.',
-            'Reforço na estabilidade e monitorização de erros em tempo real.',
-            'Eliminação de ferramentas intrusivas de reunião para manter a privacidade das conversas internas.'
+            'Nenhuma tarefa será partilhada sem revisão prévia do gestor.',
+            'Reforço na monitorização de entregas e prazos da sprint.'
           ],
           blockersAndRisks: [
-            'Tempo apertado para testes de regressão antes do freeze.',
-            'Alinhamento com equipa de infraestrutura para aumento de cotas.'
+            'Tempo reduzido para validação final antes da entrega.'
           ],
           nextSteps: [
-            'Revisão individual das 3 tarefas atribuídas.',
-            'Aprovação e disparo automático para Slack e Jira.'
+            'Revisão individual das tarefas extraídas.',
+            'Exportação para Google Tasks e Google Docs.'
           ]
         },
         tasks: generatedTasks,
         transcript: [
-          { speaker: 'Gestor (Você)', time: '00:05', text: 'Vamos iniciar o alinhamento. A prioridade é garantir que cada um sabe exatamente o seu papel sem o constrangimento de termos bots a ouvir a conversa.' },
-          { speaker: 'Bernardo Costa', time: '01:20', text: 'Perfeito. Pelo meu lado eu assumo o schema da API mas preciso de 8 horas estimadas.' },
-          { speaker: 'Margarida Vale', time: '02:15', text: 'Eu cuido da bateria de testes de carga com 5000 requests.' },
-          { speaker: 'Gestor (Você)', time: '03:40', text: 'Combinado. Vou analisar o mapa de tarefas no SmartMeeting e aprovar cada item antes de notificar o squad.' }
+          { speaker: managerName || 'Gestor', time: '00:05', text: 'Vamos alinhar os entregáveis desta semana e garantir que cada tarefa fica atribuída com clareza.' },
+          { speaker: 'Bernardo Costa', time: '01:20', text: 'Assumo a atualização técnica da API com entrega prevista para esta semana.' },
+          { speaker: 'Margarida Vale', time: '02:15', text: 'Eu fico responsável pelos testes de carga e validação final.' },
+          { speaker: managerName || 'Gestor', time: '03:40', text: 'Combinado. Vou rever e aprovar o mapa de tarefas no SmartMeeting.' }
         ]
       };
 
@@ -436,38 +459,52 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
             <Radio className="w-3.5 h-3.5" />
             <span>Módulo de Ingestão Multimédia</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-            Gravar ou Carregar Reunião
+          <h2 className="text-xl font-bold text-white tracking-tight">
+            Nova Reunião
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Suporta ficheiros de áudio e vídeo (.mp3, .wav, .mp4) ou captura direta de microfone/ecrã no browser.
+            Carregue áudio/vídeo, grave no browser ou cole uma transcrição em texto.
           </p>
         </div>
 
         {/* Tab Switcher */}
         {step === 'idle' && (
-          <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg shrink-0">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg shrink-0">
             <button
+              type="button"
               onClick={() => { setActiveTab('upload'); setFileError(null); }}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 activeTab === 'upload'
                   ? 'bg-slate-800 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Upload className="w-3.5 h-3.5" />
-              <span>Upload Ficheiro</span>
+              <span>Áudio / Vídeo</span>
             </button>
             <button
+              type="button"
+              onClick={() => { setActiveTab('text'); setFileError(null); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeTab === 'text'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Texto / Transcrição</span>
+            </button>
+            <button
+              type="button"
               onClick={() => { setActiveTab('record'); setFileError(null); }}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 activeTab === 'record'
                   ? 'bg-slate-800 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Mic className="w-3.5 h-3.5" />
-              <span>Gravação Direta</span>
+              <span>Gravar</span>
             </button>
           </div>
         )}
@@ -635,6 +672,48 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
             </div>
           )}
         </div>
+      ) : activeTab === 'text' ? (
+        /* STATE 2B: TEXT / TRANSCRIPT PASTE */
+        <form onSubmit={handleProcessText} className="mt-6 space-y-4">
+          <div>
+            <label htmlFor="meeting-text-title" className="block text-xs font-medium text-slate-300 mb-1.5">
+              Título da Reunião (opcional)
+            </label>
+            <input
+              id="meeting-text-title"
+              type="text"
+              value={textTitle}
+              onChange={(e) => setTextTitle(e.target.value)}
+              placeholder="Ex: Alinhamento de Produto — Segunda-feira"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="meeting-text-body" className="block text-xs font-medium text-slate-300 mb-1.5">
+              Transcrição ou Notas da Reunião
+            </label>
+            <textarea
+              id="meeting-text-body"
+              rows={7}
+              value={transcriptText}
+              onChange={(e) => setTranscriptText(e.target.value)}
+              placeholder={"Cole aqui a transcrição ou notas da reunião.\nExemplo:\nJoana: Precisamos fechar o protótipo até sexta-feira.\nTarefa: Validar protótipo com a equipa até sexta"}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 leading-relaxed"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="submit"
+              disabled={!transcriptText.trim()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 disabled:opacity-40 rounded-lg transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Criar Reunião a partir do Texto</span>
+            </button>
+          </div>
+        </form>
       ) : (
         /* STATE 3: DIRECT BROWSER RECORDING */
         <div className="mt-6 space-y-6">
@@ -677,7 +756,7 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
                   <span className="text-xs font-semibold text-white">Áudio do Separador / Reunião</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Grave o Google Meet ou Zoom diretamente pelo separador do navegador, sem convidar nenhum bot.
+                  Grave o separador da videochamada diretamente no navegador.
                 </p>
               </button>
             </div>
