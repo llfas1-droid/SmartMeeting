@@ -1,0 +1,10 @@
+{
+  "name": "SmartMeeting - Reuniões Inteligentes & Gestão de Tarefas",
+  "description": "Plataforma SaaS sem bots intrusivos com gravação direta, upload multimédia, resumos automáticos e distribuição de tarefas com aprovação do gestor.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "display-capture"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
