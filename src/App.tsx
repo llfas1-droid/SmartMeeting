@@ -262,7 +262,7 @@ export default function App() {
                 <div>
                   <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
                     <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-                    Trechos de Voz Diarizados (Sem Bots)
+                    Trechos de Voz Diarizados
                   </h5>
                   <div className="space-y-2.5 max-h-56 overflow-y-auto pr-2 text-xs">
                     {activeMeeting.transcript?.map((t, idx) => (
@@ -287,16 +287,11 @@ export default function App() {
           onExploreGovernance={() => setShowTaskManagerModal(true)}
         />
 
-        {/* Comparison & Enterprise Security Section */}
+        {/* Comparison Section */}
         <ArchitectureComparison />
 
-        {/* Pricing Tiers & Footer */}
-        <PricingAndFooter
-          onSelectPlan={(plan) => {
-            showToast(`Plano "${plan}" selecionado!`);
-            handleOpenAuth('register');
-          }}
-        />
+        {/* Footer */}
+        <PricingAndFooter />
       </main>
 
       {/* MODAL 1: MEDIA RECORDER & DROPZONE */}

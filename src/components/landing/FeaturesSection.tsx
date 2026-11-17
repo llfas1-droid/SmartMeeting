@@ -28,10 +28,10 @@ export const FeaturesSection: React.FC<FeaturesSectionProps> = ({
             Arquitetura Operacional
           </div>
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white text-balance">
-            Construído para equipas ágeis que valorizam foco, governança e privacidade.
+            Construído para equipas ágeis que valorizam foco e governança.
           </h2>
           <p className="mt-4 text-base text-slate-400 leading-relaxed">
-            A maioria das ferramentas de IA gera ruído ao inundar o Jira e Slack com tarefas alucinadas ou força bots intrusivos nas suas chamadas. O SmartMeeting inverte essa lógica.
+            A maioria das ferramentas de IA gera ruído ao inundar o Jira e Slack com tarefas alucinadas. O SmartMeeting garante controlo total antes de qualquer disparo.
           </p>
         </div>
 
@@ -47,13 +47,13 @@ export const FeaturesSection: React.FC<FeaturesSectionProps> = ({
                 Aprovação de Tarefas "Manager-in-the-Loop"
               </h3>
               <p className="text-sm text-slate-300 leading-relaxed mb-6">
-                O maior diferencial de mercado: a IA extrai automaticamente os acordos da reunião, mas a equipa <strong className="text-white">nunca é notificada diretamente</strong>. O gestor tem um portão de controlo obrigatório para validar responsáveis, ajustar prazos ou descartar sugestões antes de qualquer webhook disparar para Jira, Linear ou Slack.
+                O maior diferencial do fluxo: a IA extrai automaticamente os acordos da reunião, mas a equipa <strong className="text-white">nunca é notificada diretamente</strong>. Existe um portão de controlo obrigatório para validar responsáveis, ajustar prazos ou descartar sugestões antes de sincronizar com Google Tasks, Jira ou Slack.
               </p>
 
               {/* Interactive preview snippet */}
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800/80 space-y-3 font-sans text-xs">
                 <div className="flex items-center justify-between text-slate-400 pb-2 border-b border-slate-800">
-                  <span className="font-semibold text-slate-200">Portão de Validação do Gestor</span>
+                  <span className="font-semibold text-slate-200">Portão de Validação</span>
                   <span className="text-cyan-400 font-mono">1 Clique para Sincronizar</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-slate-900 border border-emerald-500/30">
@@ -80,33 +80,33 @@ export const FeaturesSection: React.FC<FeaturesSectionProps> = ({
             </div>
           </div>
 
-          {/* Card 2: Sem Bots Intrusivos (Col span 5) */}
-          <div id="no-bots" className="md:col-span-5 bg-slate-900/70 border border-slate-800 rounded-2xl p-7 sm:p-8 flex flex-col justify-between hover:border-slate-700 transition-colors">
+          {/* Card 2: Gravação Direta & Upload Multimédia (Col span 5) */}
+          <div className="md:col-span-5 bg-slate-900/70 border border-slate-800 rounded-2xl p-7 sm:p-8 flex flex-col justify-between hover:border-slate-700 transition-colors">
             <div>
               <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 mb-3">
-                <span>02. Experiência sem Constrangimento</span>
+                <span>02. Captura Flexível</span>
               </div>
               <h3 className="text-xl sm:text-2xl font-bold text-white mb-3">
-                Zero Bots na Chamada
+                Gravação Direta ou Upload
               </h3>
               <p className="text-sm text-slate-300 leading-relaxed mb-6">
-                Nada de bots estranhos a pedir para entrar no Zoom de clientes ou a gravar reuniões sigilosas sem consentimento explícito. Grave o áudio/ecrã diretamente pelo browser ou faça upload do ficheiro .mp3/.wav/.mp4 quando terminar.
+                Grave o áudio diretamente pelo microfone ou separador do browser, ou faça upload do ficheiro .mp3, .wav ou .mp4 quando a reunião terminar.
               </p>
 
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800/80 text-xs space-y-2">
-                <div className="flex items-center gap-2 text-rose-400">
-                  <span className="font-bold">✕ Bots Convencionais:</span>
-                  <span className="text-slate-400">Entram como participantes estranhos e inibem os clientes.</span>
+                <div className="flex items-center gap-2 text-cyan-400">
+                  <span className="font-bold">• Gravação no Browser:</span>
+                  <span className="text-slate-300">Microfone ou áudio de separador em tempo real.</span>
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400 pt-1">
-                  <span className="font-bold">✓ SmartMeeting:</span>
-                  <span className="text-slate-200">100% invisível. Gravação direta ou upload a frio.</span>
+                  <span className="font-bold">• Upload Drag & Drop:</span>
+                  <span className="text-slate-200">Suporte nativo a .mp3, .wav e .mp4 até 500 MB.</span>
                 </div>
               </div>
             </div>
 
             <div className="pt-6 mt-6 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-xs text-slate-400">Suporte a gravações presenciais e remotas.</span>
+              <span className="text-xs text-slate-400">Suporte a reuniões presenciais e remotas.</span>
               <button
                 onClick={onOpenRecorder}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"

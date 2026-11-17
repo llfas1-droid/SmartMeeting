@@ -434,7 +434,7 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-cyan-400 mb-1">
             <Radio className="w-3.5 h-3.5" />
-            <span>Módulo de Ingestão Multimédia · Sem Bots Intrusivos</span>
+            <span>Módulo de Ingestão Multimédia</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
             Gravar ou Carregar Reunião
@@ -788,14 +788,13 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
         </div>
       )}
 
-      {/* Footer Governance Note */}
+      {/* Footer Note */}
       <div className="mt-8 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 gap-2">
-        <div className="flex items-center gap-1.5">
-          <ShieldAlert className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span>Privacidade corporativa: Nenhum bot externo é injetado na sua reunião.</span>
+        <div>
+          <span>Captura de áudio e upload multimédia direto no browser</span>
         </div>
         <div>
-          <span>Processamento estrito em infraestrutura isolada</span>
+          <span>Formatos suportados: .mp3, .wav, .mp4</span>
         </div>
       </div>
     </div>

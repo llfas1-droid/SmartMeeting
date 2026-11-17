@@ -33,7 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </button>
 
-        {/* Zone 2: 4-5 single-line clean navigation links */}
+        {/* Zone 2: Clean single-line navigation links */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
           <button 
             onClick={() => onNavigateSection('features')}
@@ -42,28 +42,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             Funcionalidades
           </button>
           <button 
-            onClick={() => onNavigateSection('no-bots')}
-            className="hover:text-cyan-300 transition-colors whitespace-nowrap shrink-0 focus:outline-none"
-          >
-            Sem Bots Intrusivos
-          </button>
-          <button 
             onClick={() => onNavigateSection('governance')}
             className="hover:text-cyan-300 transition-colors whitespace-nowrap shrink-0 focus:outline-none"
           >
             Aprovação de Tarefas
-          </button>
-          <button 
-            onClick={() => onNavigateSection('security')}
-            className="hover:text-cyan-300 transition-colors whitespace-nowrap shrink-0 focus:outline-none"
-          >
-            Segurança & RGPD
-          </button>
-          <button 
-            onClick={() => onNavigateSection('pricing')}
-            className="hover:text-cyan-300 transition-colors whitespace-nowrap shrink-0 focus:outline-none"
-          >
-            Planos
           </button>
         </nav>
 

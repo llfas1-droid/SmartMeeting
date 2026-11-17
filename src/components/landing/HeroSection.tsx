@@ -17,20 +17,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       <div className="absolute top-1/3 right-1/4 w-[400px] h-[300px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Anti-Slop Clean Editorial Kicker (Zero pill discipline) */}
-        <div className="flex items-center gap-2 text-xs font-semibold text-cyan-400 mb-4">
-          <span>Sem Bots Intrusivos</span>
-          <span aria-hidden="true" className="text-slate-600">·</span>
-          <span>Aprovação Manager-in-the-Loop</span>
-          <span aria-hidden="true" className="text-slate-600">·</span>
-          <span>Privacidade Corporativa</span>
-        </div>
-
         {/* Main Headline */}
         <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white max-w-4xl leading-[1.15] text-balance">
           Elimine o fardo administrativo pós-reunião.{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400">
-            Com controlo e sem bots constrangedores.
+            Resumos claros e tarefas validadas pela equipa.
           </span>
         </h1>
 
@@ -59,23 +50,19 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           </button>
         </div>
 
-        {/* Proof of impact strip (Quantitative Rigor) */}
-        <div className="mt-12 pt-8 border-t border-slate-800/80 grid grid-cols-2 md:grid-cols-4 gap-6 text-xs text-slate-400">
+        {/* Proof of impact strip */}
+        <div className="mt-12 pt-8 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-6 text-xs text-slate-400">
           <div>
             <div className="text-2xl font-bold text-white font-mono tabular-nums">5.4h</div>
-            <div className="mt-1 text-slate-400">Poupadas semanalmente por cada Scrum Master</div>
+            <div className="mt-1 text-slate-400">Poupadas semanalmente por equipa ágil</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-cyan-400 font-mono tabular-nums">0 Bots</div>
-            <div className="mt-1 text-slate-400">A pedir autorização para entrar em chamadas de clientes</div>
+            <div className="text-2xl font-bold text-cyan-400 font-mono tabular-nums">100%</div>
+            <div className="mt-1 text-slate-400">Tarefas revistas antes do disparo de notificações</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-white font-mono tabular-nums">100%</div>
-            <div className="mt-1 text-slate-400">Tarefas revistas antes do disparo para Jira ou Slack</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-indigo-400 font-mono tabular-nums">AES-256</div>
-            <div className="mt-1 text-slate-400">Encriptação em repouso e isolamento de tenant</div>
+            <div className="text-2xl font-bold text-indigo-400 font-mono tabular-nums">&lt; 2 min</div>
+            <div className="mt-1 text-slate-400">Do ficheiro de áudio ao mapa de tarefas pronto</div>
           </div>
         </div>
 
