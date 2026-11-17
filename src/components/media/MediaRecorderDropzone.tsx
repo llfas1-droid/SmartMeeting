@@ -16,11 +16,12 @@ import {
   Layers, 
   ArrowRight,
   FileText,
-  RotateCcw
+  RotateCcw,
+  Loader2
 } from 'lucide-react';
 import { validateMediaFile, formatDuration, formatFileSize } from '../../lib/meetingUtils.ts';
 import { buildMeetingFromTranscriptText } from '../../lib/userMeetingsStorage.ts';
-import { MeetingRecording, ProcessingStep, TaskItem } from '../../types/index.ts';
+import { MeetingRecording, MeetingSummary, ProcessingStep, TaskItem } from '../../types/index.ts';
 
 interface MediaRecorderDropzoneProps {
   onMeetingProcessed: (newMeeting: MeetingRecording) => void;
@@ -57,6 +58,8 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
   const [step, setStep] = useState<ProcessingStep>('idle');
   const [progressPercent, setProgressPercent] = useState(0);
   const [currentStepText, setCurrentStepText] = useState('');
+  const [isProcessingText, setIsProcessingText] = useState(false);
+  const [textAiError, setTextAiError] = useState<string | null>(null);
 
   // Audio Context & MediaRecorder Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -298,10 +301,10 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
     setIsPaused(false);
   };
 
-  // Submit text transcript directly
-  const handleProcessText = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Fallback local text processing when explicitly chosen after an AI error
+  const handleProcessTextLocally = () => {
     setFileError(null);
+    setTextAiError(null);
     if (!transcriptText.trim()) {
       setFileError('Cole ou escreva o texto da reunião antes de processar.');
       return;
@@ -314,6 +317,71 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
       managerEmail,
     });
     onMeetingProcessed(newMeeting);
+  };
+
+  // Submit text transcript via Gemini AI extraction
+  const handleProcessText = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setFileError(null);
+    setTextAiError(null);
+    if (!transcriptText.trim()) {
+      setFileError('Cole ou escreva o texto da reunião antes de processar.');
+      return;
+    }
+
+    const baseMeeting = buildMeetingFromTranscriptText({
+      title: textTitle,
+      transcriptText,
+      managerName,
+      managerEmail,
+    });
+
+    setIsProcessingText(true);
+    try {
+      const response = await fetch('/api/extract-tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: baseMeeting.title,
+          transcriptText,
+          managerName,
+          managerEmail,
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as {
+        summary?: MeetingSummary;
+        tasks?: TaskItem[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            'Não foi possível extrair o resumo e o mapa de tarefas com IA neste momento.'
+        );
+      }
+
+      const aiTasks = Array.isArray(data.tasks) ? data.tasks : baseMeeting.tasks;
+      const enrichedMeeting: MeetingRecording = {
+        ...baseMeeting,
+        summary: data.summary ?? baseMeeting.summary,
+        tasks: aiTasks,
+        managerApprovalStatus: 'pending',
+      };
+
+      onMeetingProcessed(enrichedMeeting);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Erro ao comunicar com o servidor para extração de tarefas.';
+      setTextAiError(message);
+    } finally {
+      setIsProcessingText(false);
+    }
   };
 
   // Submit file or recording for AI processing
@@ -703,14 +771,53 @@ export const MediaRecorderDropzone: React.FC<MediaRecorderDropzoneProps> = ({
             />
           </div>
 
+          {textAiError && (
+            <div
+              role="alert"
+              className="p-3.5 bg-rose-950/60 border border-rose-500/40 rounded-xl text-xs text-rose-200 space-y-2.5"
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">{textAiError}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pl-6">
+                <button
+                  type="button"
+                  onClick={() => void handleProcessText()}
+                  disabled={isProcessingText}
+                  className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-xs font-semibold text-rose-100 transition-colors"
+                >
+                  Tentar novamente com IA
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProcessTextLocally}
+                  disabled={isProcessingText}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors"
+                >
+                  Processar localmente (sem IA)
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-2">
             <button
               type="submit"
-              disabled={!transcriptText.trim()}
+              disabled={!transcriptText.trim() || isProcessingText}
               className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 disabled:opacity-40 rounded-lg transition-colors"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Criar Reunião a partir do Texto</span>
+              {isProcessingText ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>A extrair resumo e tarefas...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Criar Reunião a partir do Texto</span>
+                </>
+              )}
             </button>
           </div>
         </form>

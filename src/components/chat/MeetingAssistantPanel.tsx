@@ -4,6 +4,7 @@ import type { ChatHistoryEntry } from '../../lib/meetingChatContext.ts';
 import {
   AlertCircle,
   Bot,
+  ListTodo,
   Loader2,
   MessageSquare,
   Send,
@@ -19,6 +20,8 @@ interface MeetingAssistantPanelProps {
   variant?: 'inline' | 'drawer';
   onClose?: () => void;
   onRequestLoadMeeting?: () => void;
+  onSyncTasksFromAI?: () => Promise<void>;
+  isSyncingTasks?: boolean;
 }
 
 interface UIMessage {
@@ -39,6 +42,8 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
   variant = 'inline',
   onClose,
   onRequestLoadMeeting,
+  onSyncTasksFromAI,
+  isSyncingTasks = false,
 }) => {
   const [messagesByMeeting, setMessagesByMeeting] = useState<Record<string, UIMessage[]>>({});
   const [inputText, setInputText] = useState('');
@@ -197,6 +202,23 @@ export const MeetingAssistantPanel: React.FC<MeetingAssistantPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {meeting && onSyncTasksFromAI && (
+            <button
+              type="button"
+              onClick={() => void onSyncTasksFromAI()}
+              disabled={isSyncingTasks || isLoading}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors disabled:opacity-40"
+            >
+              {isSyncingTasks ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ListTodo className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {isSyncingTasks ? 'A sincronizar...' : 'Atualizar Mapa de Tarefas'}
+              </span>
+            </button>
+          )}
           {meeting && activeMessages.length > 0 && (
             <button
               type="button"

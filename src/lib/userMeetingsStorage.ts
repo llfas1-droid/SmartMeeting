@@ -46,6 +46,88 @@ export function saveUserMeetings(
   }
 }
 
+const EXPLICIT_TASK_PREFIX = /^(todo:|tarefa:|ação:|acao:|- \[ \])/i;
+const COMMITMENT_PATTERN =
+  /\b(eu\s+(preparo|faço|faco|trato|envio|atualizo|crio|reviso|valido|configuro|assumo|vou)|vou\s+(preparar|fazer|enviar|atualizar|criar|rever|validar|configurar|entregar|finalizar)|precisamos\s+(de\s+)?(validar|fechar|enviar|atualizar|criar|rever|configurar|finalizar)|fic[ao]u?\s+respons[áa]vel|respons[áa]vel\s+por|assumo\s+|ficou\s+combinado|entregar\s+at[ée])\b/i;
+
+function inferPriorityFromLine(line: string): TaskItem['priority'] {
+  if (/\b(urgente|cr[íi]tico|imediato|hoje|bloqueio)\b/i.test(line)) {
+    return 'urgent';
+  }
+  if (/\b(amanh[ãa]|priorit[áa]rio|alta|importante|quinta|sexta)\b/i.test(line)) {
+    return 'high';
+  }
+  return 'medium';
+}
+
+export function extractTasksFromTranscriptLines(
+  lines: string[],
+  managerName?: string,
+  managerEmail?: string
+): TaskItem[] {
+  const today = new Date().toISOString().split('T')[0];
+  const tasks: TaskItem[] = [];
+
+  lines.forEach((rawLine, idx) => {
+    const line = rawLine.trim();
+    if (!line) return;
+
+    const isExplicit = EXPLICIT_TASK_PREFIX.test(line);
+    const isCommitment = COMMITMENT_PATTERN.test(line);
+    if (!isExplicit && !isCommitment) return;
+
+    const colonIdx = line.indexOf(':');
+    const hasSpeaker = !isExplicit && colonIdx > 1 && colonIdx < 40;
+    const speaker = hasSpeaker ? line.slice(0, colonIdx).trim() : '';
+    const rawBody = isExplicit
+      ? line.replace(EXPLICIT_TASK_PREFIX, '').trim()
+      : hasSpeaker
+      ? line.slice(colonIdx + 1).trim()
+      : line;
+
+    if (!rawBody) return;
+
+    const assigneeName = speaker || managerName?.trim() || 'Equipa';
+    const assigneeEmail =
+      speaker && managerName && speaker.toLowerCase() === managerName.trim().toLowerCase()
+        ? managerEmail?.trim() || 'equipa@empresa.com'
+        : speaker
+        ? `${speaker.toLowerCase().replace(/[^a-z0-9]+/g, '.')}@empresa.com`
+        : managerEmail?.trim() || 'equipa@empresa.com';
+
+    const cleanTitle = rawBody.replace(/\.$/, '');
+    tasks.push({
+      id: `task_${Date.now()}_${idx + 1}`,
+      title: cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1),
+      description: 'Extraído da transcrição da reunião para aprovação no Mapa de Tarefas.',
+      assignee: {
+        name: assigneeName,
+        email: assigneeEmail,
+        role: speaker ? 'Participante' : 'Responsável',
+      },
+      dueDate: today,
+      priority: inferPriorityFromLine(line),
+      status: 'pending_approval',
+      contextSnippet: line,
+    });
+  });
+
+  return tasks;
+}
+
+export function mergeExtractedTasks(
+  existing: TaskItem[],
+  incoming: TaskItem[]
+): TaskItem[] {
+  const normalizedExistingTitles = new Set(
+    existing.map((t) => t.title.trim().toLowerCase())
+  );
+  const newOnes = incoming.filter(
+    (t) => !normalizedExistingTitles.has(t.title.trim().toLowerCase())
+  );
+  return [...existing, ...newOnes];
+}
+
 export function buildMeetingFromTranscriptText(params: {
   title?: string;
   transcriptText: string;
@@ -82,23 +164,11 @@ export function buildMeetingFromTranscriptText(params: {
     };
   });
 
-  const actionPrefixes = /^(todo:|tarefa:|ação:|acao:|- \[ \])/i;
-  const tasks: TaskItem[] = lines
-    .filter((l) => actionPrefixes.test(l))
-    .map((l, idx) => ({
-      id: `task_${Date.now()}_${idx + 1}`,
-      title: l.replace(actionPrefixes, '').trim(),
-      description: 'Extraído diretamente do texto da reunião carregado.',
-      assignee: {
-        name: params.managerName?.trim() || 'Equipa',
-        email: params.managerEmail?.trim() || 'equipa@empresa.com',
-        role: 'Responsável',
-      },
-      dueDate: today,
-      priority: 'medium',
-      status: 'pending_approval',
-      contextSnippet: l,
-    }));
+  const tasks = extractTasksFromTranscriptLines(
+    lines,
+    params.managerName,
+    params.managerEmail
+  );
 
   const firstPreview = lines.slice(0, 2).join(' ');
   const summaryPreview =
@@ -112,7 +182,7 @@ export function buildMeetingFromTranscriptText(params: {
     fileType: 'audio/mp3',
     fileName: 'transcricao_texto.txt',
     fileSizeBytes: new TextEncoder().encode(cleaned).length,
-    managerApprovalStatus: tasks.length > 0 ? 'pending' : 'fully_approved',
+    managerApprovalStatus: 'pending',
     summary: {
       executiveSummary:
         summaryPreview || 'Transcrição textual carregada e pronta para consulta no Assistente da Reunião.',
@@ -124,7 +194,7 @@ export function buildMeetingFromTranscriptText(params: {
       nextSteps:
         tasks.length > 0
           ? ['Rever e aprovar as tarefas identificadas antes de notificar a equipa.']
-          : ['Colocar dúvidas ao Assistente da Reunião para extrair detalhes.'],
+          : ['Extrair ou adicionar tarefas no Mapa de Tarefas para distribuição.'],
     },
     tasks,
     transcript,

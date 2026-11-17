@@ -92,13 +92,48 @@ export function evaluatePasswordStrength(password: string): PasswordScoreResult 
   };
 }
 
+export interface TaskMapMetrics {
+  total: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+}
+
+export function computeTaskMapMetrics(tasks: TaskItem[]): TaskMapMetrics {
+  if (!tasks || tasks.length === 0) {
+    return { total: 0, approved: 0, pending: 0, rejected: 0 };
+  }
+
+  let approved = 0;
+  let pending = 0;
+  let rejected = 0;
+
+  for (const task of tasks) {
+    if (task.status === 'approved' || task.status === 'modified') {
+      approved++;
+    } else if (task.status === 'rejected') {
+      rejected++;
+    } else {
+      pending++;
+    }
+  }
+
+  return {
+    total: tasks.length,
+    approved,
+    pending,
+    rejected,
+  };
+}
+
 export function computeTaskApprovalStatus(tasks: TaskItem[]): 'pending' | 'partially_approved' | 'fully_approved' {
-  if (!tasks || tasks.length === 0) return 'fully_approved';
-  
-  const approvedCount = tasks.filter(t => t.status === 'approved' || t.status === 'modified').length;
-  
-  if (approvedCount === 0) return 'pending';
-  if (approvedCount === tasks.length) return 'fully_approved';
+  if (!tasks || tasks.length === 0) return 'pending';
+
+  const { approved, pending } = computeTaskMapMetrics(tasks);
+
+  if (approved === 0 && pending > 0) return 'pending';
+  if (pending === 0 && approved > 0) return 'fully_approved';
+  if (approved === 0 && pending === 0) return 'pending';
   return 'partially_approved';
 }
 

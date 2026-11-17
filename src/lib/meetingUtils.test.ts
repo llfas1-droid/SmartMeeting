@@ -4,6 +4,7 @@ import {
   validateMediaFile, 
   evaluatePasswordStrength, 
   computeTaskApprovalStatus,
+  computeTaskMapMetrics,
   formatDuration,
   formatFileSize 
 } from './meetingUtils.ts';
@@ -49,7 +50,7 @@ describe('meetingUtils pure unit tests', () => {
     assert.strictEqual(strong.label, 'Excelente');
   });
 
-  test('computeTaskApprovalStatus determines manager governance state', () => {
+  test('computeTaskApprovalStatus and computeTaskMapMetrics track total, approved, pending, rejected', () => {
     const sampleTask = (status: TaskItem['status']): TaskItem => ({
       id: '1',
       title: 'Setup CI/CD',
@@ -68,6 +69,25 @@ describe('meetingUtils pure unit tests', () => {
 
     const allApproved = [sampleTask('approved'), sampleTask('modified')];
     assert.strictEqual(computeTaskApprovalStatus(allApproved), 'fully_approved');
+
+    const mixed = [
+      sampleTask('approved'),
+      sampleTask('modified'),
+      sampleTask('pending_approval'),
+      sampleTask('rejected'),
+    ];
+    assert.deepStrictEqual(computeTaskMapMetrics(mixed), {
+      total: 4,
+      approved: 2,
+      pending: 1,
+      rejected: 1,
+    });
+    assert.deepStrictEqual(computeTaskMapMetrics([]), {
+      total: 0,
+      approved: 0,
+      pending: 0,
+      rejected: 0,
+    });
   });
 
   test('formatDuration formats seconds accurately', () => {

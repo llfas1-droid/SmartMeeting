@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { MeetingRecording, TaskItem, User } from './types/index.ts';
+import type { MeetingRecording, MeetingSummary, TaskItem, User } from './types/index.ts';
 import { Navbar } from './components/layout/Navbar.tsx';
 import { HeroSection } from './components/landing/HeroSection.tsx';
 import { FeaturesSection } from './components/landing/FeaturesSection.tsx';
@@ -11,19 +11,36 @@ import { MeetingChatbotDrawer } from './components/chat/MeetingChatbotDrawer.tsx
 import { MeetingAssistantPanel } from './components/chat/MeetingAssistantPanel.tsx';
 import { GoogleWorkspaceModal } from './components/google/GoogleWorkspaceModal.tsx';
 import {
+  AlertCircle,
+  Calendar,
   CheckCircle2,
   Clock,
   FileAudio,
   FileText,
   Layers,
   ListTodo,
+  Loader2,
   MessageSquare,
   Plus,
+  RotateCcw,
+  Sparkles,
   Trash2,
   Upload,
+  User as UserIcon,
+  XCircle,
 } from 'lucide-react';
-import { computeTaskApprovalStatus, formatDuration, formatFileSize } from './lib/meetingUtils.ts';
-import { loadUserMeetings, saveUserMeetings } from './lib/userMeetingsStorage.ts';
+import {
+  computeTaskApprovalStatus,
+  computeTaskMapMetrics,
+  formatDuration,
+  formatFileSize,
+} from './lib/meetingUtils.ts';
+import {
+  extractTasksFromTranscriptLines,
+  loadUserMeetings,
+  mergeExtractedTasks,
+  saveUserMeetings,
+} from './lib/userMeetingsStorage.ts';
 
 export default function App() {
   // Unauthenticated by default: landing page strictly gates workspace behind login/register
@@ -42,9 +59,21 @@ export default function App() {
   const [showGoogleWorkspaceModal, setShowGoogleWorkspaceModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Task Map sync & quick-add states
+  const [isSyncingTasks, setIsSyncingTasks] = useState(false);
+  const [taskSyncError, setTaskSyncError] = useState<string | null>(null);
+  const [showQuickAddTask, setShowQuickAddTask] = useState(false);
+  const [quickTaskTitle, setQuickTaskTitle] = useState('');
+  const [quickTaskAssignee, setQuickTaskAssignee] = useState('');
+  const [quickTaskDueDate, setQuickTaskDueDate] = useState(
+    () => new Date().toISOString().split('T')[0]
+  );
+  const [quickTaskPriority, setQuickTaskPriority] =
+    useState<TaskItem['priority']>('medium');
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3200);
   };
 
   const handleOpenAuth = (mode: 'login' | 'register') => {
@@ -57,6 +86,7 @@ export default function App() {
     setCurrentUser(user);
     setMeetings(userMeetings);
     setActiveMeeting(userMeetings[0] ?? null);
+    setTaskSyncError(null);
     showToast(`Bem-vindo(a), ${user.name}!`);
   };
 
@@ -68,6 +98,7 @@ export default function App() {
     setShowTaskManagerModal(false);
     setShowChatbotDrawer(false);
     setShowGoogleWorkspaceModal(false);
+    setTaskSyncError(null);
     showToast('Sessão terminada.');
   };
 
@@ -75,23 +106,34 @@ export default function App() {
     const updated = [newMeeting, ...meetings];
     setMeetings(updated);
     setActiveMeeting(newMeeting);
+    setTaskSyncError(null);
     if (currentUser) {
       saveUserMeetings(currentUser.email, updated);
     }
     setShowRecorderModal(false);
     if (newMeeting.tasks.length > 0) {
-      setShowTaskManagerModal(true);
-      showToast('Reunião adicionada! Reveja o mapa de tarefas antes de notificar.');
+      showToast(
+        `Reunião processada! ${newMeeting.tasks.length} tarefa(s) adicionada(s) ao Mapa de Tarefas.`
+      );
     } else {
       showToast('Reunião adicionada ao seu painel.');
     }
   };
 
-  const handleUpdateMeetingTasks = (meetingId: string, updatedTasks: TaskItem[]) => {
+  const handleUpdateMeetingTasks = (
+    meetingId: string,
+    updatedTasks: TaskItem[],
+    updatedSummary?: MeetingSummary
+  ) => {
     const updatedStatus = computeTaskApprovalStatus(updatedTasks);
     const updatedMeetings = meetings.map((m) =>
       m.id === meetingId
-        ? { ...m, tasks: updatedTasks, managerApprovalStatus: updatedStatus }
+        ? {
+            ...m,
+            tasks: updatedTasks,
+            summary: updatedSummary ?? m.summary,
+            managerApprovalStatus: updatedStatus,
+          }
         : m
     );
     setMeetings(updatedMeetings);
@@ -104,9 +146,142 @@ export default function App() {
       return {
         ...prev,
         tasks: updatedTasks,
+        summary: updatedSummary ?? prev.summary,
         managerApprovalStatus: updatedStatus,
       };
     });
+  };
+
+  const handleExtractTasksForActiveMeeting = async () => {
+    if (!activeMeeting || isSyncingTasks) return;
+
+    setTaskSyncError(null);
+    setIsSyncingTasks(true);
+    try {
+      const response = await fetch('/api/extract-tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: activeMeeting.title,
+          transcript: activeMeeting.transcript,
+          managerName: currentUser?.name,
+          managerEmail: currentUser?.email,
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as {
+        summary?: MeetingSummary;
+        tasks?: TaskItem[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            'Não foi possível extrair tarefas da reunião com IA neste momento.'
+        );
+      }
+
+      const incomingTasks = Array.isArray(data.tasks) ? data.tasks : [];
+      const merged = mergeExtractedTasks(activeMeeting.tasks, incomingTasks);
+      const addedCount = merged.length - activeMeeting.tasks.length;
+
+      handleUpdateMeetingTasks(activeMeeting.id, merged, data.summary);
+      if (addedCount > 0) {
+        showToast(
+          `${addedCount} nova(s) tarefa(s) sincronizada(s) no Mapa de Tarefas.`
+        );
+      } else {
+        showToast('Mapa de Tarefas atualizado com o resumo da reunião.');
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Erro ao sincronizar tarefas com o servidor.';
+      setTaskSyncError(msg);
+    } finally {
+      setIsSyncingTasks(false);
+    }
+  };
+
+  const handleExtractTasksLocallyForActiveMeeting = () => {
+    if (!activeMeeting) return;
+    setTaskSyncError(null);
+    const transcriptLines = (activeMeeting.transcript ?? []).map(
+      (entry) => `${entry.speaker}: ${entry.text}`
+    );
+    const localTasks = extractTasksFromTranscriptLines(
+      transcriptLines,
+      currentUser?.name,
+      currentUser?.email
+    );
+    const merged = mergeExtractedTasks(activeMeeting.tasks, localTasks);
+    const addedCount = merged.length - activeMeeting.tasks.length;
+    handleUpdateMeetingTasks(activeMeeting.id, merged);
+    showToast(
+      addedCount > 0
+        ? `${addedCount} tarefa(s) extraída(s) localmente para o Mapa de Tarefas.`
+        : 'Nenhuma tarefa adicional encontrada na transcrição.'
+    );
+  };
+
+  const handleSetTaskStatus = (
+    taskId: string,
+    status: TaskItem['status']
+  ) => {
+    if (!activeMeeting) return;
+    const updatedTasks = activeMeeting.tasks.map((t) =>
+      t.id === taskId ? { ...t, status } : t
+    );
+    handleUpdateMeetingTasks(activeMeeting.id, updatedTasks);
+  };
+
+  const handleApproveAllPending = () => {
+    if (!activeMeeting) return;
+    const updatedTasks: TaskItem[] = activeMeeting.tasks.map((t) => ({
+      ...t,
+      status: t.status === 'rejected' ? 'rejected' : 'approved',
+    }));
+    handleUpdateMeetingTasks(activeMeeting.id, updatedTasks);
+    showToast('Todas as tarefas pendentes foram aprovadas.');
+  };
+
+  const handleQuickAddTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeMeeting) return;
+    const cleanedTitle = quickTaskTitle.trim();
+    if (!cleanedTitle) return;
+
+    const assigneeName = quickTaskAssignee.trim() || currentUser?.name || 'Equipa';
+    const slug = assigneeName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '.')
+      .replace(/^\.+|\.+$/g, '');
+
+    const newTask: TaskItem = {
+      id: `task_dash_${Date.now()}`,
+      title: cleanedTitle,
+      description: 'Adicionada diretamente no Mapa de Tarefas do Dashboard.',
+      assignee: {
+        name: assigneeName,
+        email: slug ? `${slug}@empresa.com` : currentUser?.email || 'equipa@empresa.com',
+        role: 'Participante',
+      },
+      dueDate: quickTaskDueDate || new Date().toISOString().split('T')[0],
+      priority: quickTaskPriority,
+      status: 'pending_approval',
+    };
+
+    handleUpdateMeetingTasks(activeMeeting.id, [...activeMeeting.tasks, newTask]);
+    setQuickTaskTitle('');
+    setQuickTaskAssignee('');
+    setShowQuickAddTask(false);
+    showToast('Tarefa adicionada ao Mapa de Tarefas.');
   };
 
   const handleDeleteActiveMeeting = () => {
@@ -119,6 +294,7 @@ export default function App() {
     }
     setShowTaskManagerModal(false);
     setShowGoogleWorkspaceModal(false);
+    setTaskSyncError(null);
     showToast('Reunião removida do seu histórico.');
   };
 
@@ -129,15 +305,11 @@ export default function App() {
     }
   };
 
+  const activeTasks = activeMeeting?.tasks ?? [];
+  const metrics = computeTaskMapMetrics(activeTasks);
   const approvalState = activeMeeting
-    ? computeTaskApprovalStatus(activeMeeting.tasks)
+    ? computeTaskApprovalStatus(activeTasks)
     : 'pending';
-  const pendingCount = activeMeeting
-    ? activeMeeting.tasks.filter((t) => t.status === 'pending_approval').length
-    : 0;
-  const approvedCount = activeMeeting
-    ? activeMeeting.tasks.filter((t) => t.status === 'approved' || t.status === 'modified').length
-    : 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -211,7 +383,7 @@ export default function App() {
                     >
                       <ListTodo className="w-4 h-4" />
                       <span>
-                        Mapa de Tarefas ({pendingCount > 0 ? `${pendingCount} Pendentes` : 'Aprovado'})
+                        Mapa de Tarefas ({metrics.total} · {metrics.pending > 0 ? `${metrics.pending} Pendentes` : `${metrics.approved} Aprovadas`})
                       </span>
                     </button>
 
@@ -245,7 +417,10 @@ export default function App() {
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setActiveMeeting(m)}
+                    onClick={() => {
+                      setActiveMeeting(m);
+                      setTaskSyncError(null);
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap border transition-colors ${
                       activeMeeting?.id === m.id
                         ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
@@ -313,18 +488,22 @@ export default function App() {
                       Estado das Tarefas
                     </div>
                     <div className="flex items-center lg:justify-end gap-1.5 font-semibold">
-                      {approvalState === 'fully_approved' ? (
+                      {metrics.total === 0 ? (
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <ListTodo className="w-4 h-4" /> Sem tarefas extraídas
+                        </span>
+                      ) : approvalState === 'fully_approved' ? (
                         <span className="text-emerald-400 flex items-center gap-1">
                           <CheckCircle2 className="w-4 h-4" /> Aprovado
                         </span>
                       ) : (
                         <span className="text-amber-400 flex items-center gap-1">
-                          <Clock className="w-4 h-4" /> {pendingCount} Pendentes
+                          <Clock className="w-4 h-4" /> {metrics.pending} Pendentes
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-1">
-                      {approvedCount} de {activeMeeting.tasks.length} tarefas validadas
+                    <div className="text-[11px] text-slate-500 mt-1 tabular-nums">
+                      {metrics.approved} aprovadas · {metrics.rejected} rejeitadas · {metrics.total} total
                     </div>
                   </div>
                 </div>
@@ -374,6 +553,357 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Live Mapa de Tarefas Dashboard Section */}
+                <section
+                  aria-label="Mapa de Tarefas"
+                  className="mt-6 pt-6 border-t border-slate-800 space-y-4"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                        <ListTodo className="w-4 h-4 text-cyan-400" />
+                        <span>Mapa de Tarefas</span>
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Aprove, rejeite ou adicione tarefas extraídas desta reunião antes de notificar a equipa.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleExtractTasksForActiveMeeting()}
+                        disabled={isSyncingTasks}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-300 hover:text-white bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {isSyncingTasks ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5" />
+                        )}
+                        <span>{isSyncingTasks ? 'A extrair...' : 'Extrair com IA'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickAddTask((prev) => !prev)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Nova Tarefa</span>
+                      </button>
+
+                      {metrics.pending > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleApproveAllPending}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-colors"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Aprovar Pendentes</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowTaskManagerModal(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors"
+                      >
+                        <span>Gerir Completo</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4 Live Counters: Total, Aprovadas, Pendentes, Rejeitadas */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+                        Total
+                      </div>
+                      <div
+                        data-testid="dashboard-metric-total"
+                        className="text-xl font-bold text-white tabular-nums mt-0.5 font-mono"
+                      >
+                        {metrics.total}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/20">
+                      <div className="text-[11px] font-medium text-emerald-400 uppercase tracking-wider">
+                        Aprovadas
+                      </div>
+                      <div
+                        data-testid="dashboard-metric-approved"
+                        className="text-xl font-bold text-emerald-400 tabular-nums mt-0.5 font-mono"
+                      >
+                        {metrics.approved}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950 border border-amber-500/20">
+                      <div className="text-[11px] font-medium text-amber-400 uppercase tracking-wider">
+                        Pendentes
+                      </div>
+                      <div
+                        data-testid="dashboard-metric-pending"
+                        className="text-xl font-bold text-amber-400 tabular-nums mt-0.5 font-mono"
+                      >
+                        {metrics.pending}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950 border border-rose-500/20">
+                      <div className="text-[11px] font-medium text-rose-400 uppercase tracking-wider">
+                        Rejeitadas
+                      </div>
+                      <div
+                        data-testid="dashboard-metric-rejected"
+                        className="text-xl font-bold text-rose-400 tabular-nums mt-0.5 font-mono"
+                      >
+                        {metrics.rejected}
+                      </div>
+                    </div>
+                  </div>
+
+                  {taskSyncError && (
+                    <div
+                      role="alert"
+                      className="p-3.5 bg-rose-950/60 border border-rose-500/40 rounded-xl text-xs text-rose-200 space-y-2"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                        <p>{taskSyncError}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 pl-6">
+                        <button
+                          type="button"
+                          onClick={() => void handleExtractTasksForActiveMeeting()}
+                          className="px-2.5 py-1 rounded-md bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-[11px] font-semibold text-rose-100"
+                        >
+                          Tentar novamente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExtractTasksLocallyForActiveMeeting}
+                          className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-medium text-slate-200"
+                        >
+                          Extrair localmente (sem IA)
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {showQuickAddTask && (
+                    <form
+                      onSubmit={handleQuickAddTask}
+                      className="p-4 rounded-xl bg-slate-950 border border-cyan-500/40 space-y-3"
+                    >
+                      <div className="text-xs font-semibold text-cyan-300">
+                        Adicionar Tarefa ao Mapa
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] text-slate-400 mb-1">
+                            Descrição da Tarefa
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={quickTaskTitle}
+                            onChange={(e) => setQuickTaskTitle(e.target.value)}
+                            placeholder="Ex: Enviar relatório semanal ao cliente"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">
+                            Responsável
+                          </label>
+                          <input
+                            type="text"
+                            value={quickTaskAssignee}
+                            onChange={(e) => setQuickTaskAssignee(e.target.value)}
+                            placeholder="Ex: Carlos"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">
+                              Prazo
+                            </label>
+                            <input
+                              type="date"
+                              value={quickTaskDueDate}
+                              onChange={(e) => setQuickTaskDueDate(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">
+                              Prioridade
+                            </label>
+                            <select
+                              value={quickTaskPriority}
+                              onChange={(e) =>
+                                setQuickTaskPriority(e.target.value as TaskItem['priority'])
+                              }
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                            >
+                              <option value="low">Baixa</option>
+                              <option value="medium">Média</option>
+                              <option value="high">Alta</option>
+                              <option value="urgent">Urgente</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowQuickAddTask(false)}
+                          className="px-3 py-1 text-xs text-slate-400 hover:text-white"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-3.5 py-1.5 text-xs font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg"
+                        >
+                          Guardar Tarefa
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {activeTasks.length === 0 ? (
+                    <div className="p-6 rounded-xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-2.5">
+                      <p className="text-xs font-semibold text-slate-200">
+                        Nenhuma tarefa registada no Mapa de Tarefas desta reunião.
+                      </p>
+                      <p className="text-xs text-slate-400 max-w-lg mx-auto">
+                        Clique em &ldquo;Extrair com IA&rdquo; para identificar automaticamente as ações da transcrição ou adicione uma tarefa manualmente.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {activeTasks.map((task, idx) => (
+                        <div
+                          key={task.id}
+                          className={`p-3.5 rounded-xl border flex flex-col lg:flex-row lg:items-center justify-between gap-3 transition-colors ${
+                            task.status === 'approved' || task.status === 'modified'
+                              ? 'bg-slate-950/70 border-emerald-500/30'
+                              : task.status === 'rejected'
+                              ? 'bg-slate-950/40 border-rose-900/40 opacity-70'
+                              : 'bg-slate-950 border-slate-800'
+                          }`}
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-mono text-slate-500">
+                                #{idx + 1}
+                              </span>
+                              <span
+                                className={`text-xs sm:text-sm font-semibold ${
+                                  task.status === 'rejected'
+                                    ? 'text-slate-400 line-through'
+                                    : 'text-white'
+                                }`}
+                              >
+                                {task.title}
+                              </span>
+                              <span
+                                className={`text-[11px] font-semibold ${
+                                  task.status === 'approved'
+                                    ? 'text-emerald-400'
+                                    : task.status === 'modified'
+                                    ? 'text-cyan-400'
+                                    : task.status === 'rejected'
+                                    ? 'text-rose-400'
+                                    : 'text-amber-300'
+                                }`}
+                              >
+                                ·{' '}
+                                {task.status === 'approved'
+                                  ? 'Aprovada'
+                                  : task.status === 'modified'
+                                  ? 'Editada & Aprovada'
+                                  : task.status === 'rejected'
+                                  ? 'Rejeitada'
+                                  : 'Pendente'}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                              <span className="inline-flex items-center gap-1">
+                                <UserIcon className="w-3 h-3 text-cyan-400" />
+                                <strong className="text-slate-200 font-medium">
+                                  {task.assignee.name}
+                                </strong>
+                              </span>
+                              <span className="inline-flex items-center gap-1 font-mono">
+                                <Calendar className="w-3 h-3 text-slate-400" />
+                                {task.dueDate}
+                              </span>
+                              <span
+                                className={`uppercase font-semibold ${
+                                  task.priority === 'urgent'
+                                    ? 'text-rose-400'
+                                    : task.priority === 'high'
+                                    ? 'text-amber-400'
+                                    : 'text-slate-400'
+                                }`}
+                              >
+                                {task.priority}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                            {task.status !== 'pending_approval' && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleSetTaskStatus(task.id, 'pending_approval')
+                                }
+                                title="Marcar como pendente"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-amber-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Pendente</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleSetTaskStatus(task.id, 'rejected')}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+                                task.status === 'rejected'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                  : 'text-slate-300 hover:text-rose-300 bg-slate-900 hover:bg-slate-800 border border-slate-700'
+                              }`}
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Rejeitar</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetTaskStatus(task.id, 'approved')}
+                              className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                                task.status === 'approved' || task.status === 'modified'
+                                  ? 'bg-emerald-500 text-slate-950'
+                                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>
+                                {task.status === 'approved' || task.status === 'modified'
+                                  ? 'Aprovado'
+                                  : 'Aprovar'}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
             )}
 
@@ -382,6 +912,8 @@ export default function App() {
               meeting={activeMeeting}
               variant="inline"
               onRequestLoadMeeting={() => setShowRecorderModal(true)}
+              onSyncTasksFromAI={handleExtractTasksForActiveMeeting}
+              isSyncingTasks={isSyncingTasks}
             />
           </div>
         </main>
@@ -418,6 +950,8 @@ export default function App() {
           isOpen={showTaskManagerModal}
           onClose={() => setShowTaskManagerModal(false)}
           onUpdateMeetingTasks={handleUpdateMeetingTasks}
+          onExtractTasksWithAI={handleExtractTasksForActiveMeeting}
+          isExtractingTasks={isSyncingTasks}
           onOpenGoogleWorkspace={() => {
             setShowTaskManagerModal(false);
             setShowGoogleWorkspaceModal(true);
@@ -443,6 +977,8 @@ export default function App() {
             setShowChatbotDrawer(false);
             setShowRecorderModal(true);
           }}
+          onSyncTasksFromAI={handleExtractTasksForActiveMeeting}
+          isSyncingTasks={isSyncingTasks}
         />
       )}
 

@@ -7,6 +7,8 @@ interface MeetingChatbotDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onRequestLoadMeeting?: () => void;
+  onSyncTasksFromAI?: () => Promise<void>;
+  isSyncingTasks?: boolean;
 }
 
 export const MeetingChatbotDrawer: React.FC<MeetingChatbotDrawerProps> = ({
@@ -14,6 +16,8 @@ export const MeetingChatbotDrawer: React.FC<MeetingChatbotDrawerProps> = ({
   isOpen,
   onClose,
   onRequestLoadMeeting,
+  onSyncTasksFromAI,
+  isSyncingTasks,
 }) => {
   if (!isOpen) return null;
 
@@ -29,6 +33,8 @@ export const MeetingChatbotDrawer: React.FC<MeetingChatbotDrawerProps> = ({
         variant="drawer"
         onClose={onClose}
         onRequestLoadMeeting={onRequestLoadMeeting}
+        onSyncTasksFromAI={onSyncTasksFromAI}
+        isSyncingTasks={isSyncingTasks}
       />
     </div>
   );
